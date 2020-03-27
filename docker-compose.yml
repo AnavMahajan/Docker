@@ -1,0 +1,538 @@
+version: "3.7"
+services:
+  spring-cloud-config-server:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/configserver:latest
+    container_name: spring-cloud-config-server
+    environment:
+      SPRING_PROFILES_ACTIVE: native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 10
+        window: 520s
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 256M
+    volumes:
+    - /opt/dockerdata/appfiles:/config
+    ports:
+      - "8888:8888"
+
+  eurekaservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/eurekaservice:1.0
+    container_name: eurekaservice
+    ports:
+      - "8761:8761"
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+  zuulservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/zuulservice:1.0
+    container_name: zuulservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    ports:
+      - "8762:8762"
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    depends_on:
+      - eurekaservice
+  adminservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/adminservice:1.0
+    container_name: adminservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    depends_on:
+      - pg-docker
+      - eurekaservice
+  pg-docker:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/postgres:9.3
+    container_name: pg-docker
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      MAX_CONNECTIONS: 500
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 4096M
+    volumes:
+    - /opt/dockerdata/dockercompose/init.sql:/docker-entrypoint-initdb.d/init.sql
+    - /var/opt/app/postgres/data:/var/lib/postgresql/data
+  my-openldap-container1:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/osixia/openldap:1.3.0
+    container_name: my-openldap-container1
+    ports:
+      - "389:389"
+      - "636:636"
+    environment:
+      LDAP_BASE_DN: dc=localhost
+      LDAP_DOMAIN:  localhost
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app/ldap:/var/lib/ldap
+    - /var/opt/app/slapddata:/etc/ldap/slapd.d
+  phpldapadmin-service:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin-service
+    ports:
+      - "80:80"
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: my-openldap-container1
+      PHPLDAPADMIN_HTTPS: flase
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+  ldapservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/ldapservice:1.0
+    container_name: ldapservice
+    ports:
+      - "9595:9595"
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    depends_on:
+      - eurekaservice
+  authservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/authservice:1.0
+    container_name: authservice
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    depends_on:
+      - eurekaservice
+  persistenceservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/persistenceservice:1.0
+    container_name: persistenceservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    depends_on:
+      - pg-docker
+      - eurekaservice
+  qualificationservice :
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/qualificationservice:1.0
+    container_name: qualificationservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+  packagevalidatorservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/packagevalidatorservice:1.0
+    container_name: packagevalidatorservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+  reposervice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/reposervice:1.0
+    container_name: reposervice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 4096M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+  wlmservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/wlmservice:1.0
+    container_name: wlmservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 4096M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+      - zuulservice
+  securityservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/securityservice:1.0
+    container_name: securityservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+      - zuulservice
+  tenancyservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/tenancyservice:1.0
+    container_name: tenancyservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    ports:
+      - "9790:9790"
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+  bitbucketservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/bitbucketservice:1.0
+    container_name: bitbucketservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    depends_on:
+      - pg-docker
+      - eurekaservice
+      - zuulservice
+  csarservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/csarservice:1.0
+    container_name: csarservice
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    - /var/opt/app/voa/vnf_package:/home/voa/vnf_package/
+    ports:
+      - "7209:7209"
+    depends_on:
+      - pg-docker
+      - eurekaservice
+      - zuulservice
+  importservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/importservice:1.0
+    restart: always
+    container_name: importservice
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+    volumes:
+    - /var/opt/app:/var/opt/app
+    - /var/opt/app/VOA_Private_Key.pem:/home/ec2-user/VOA_Private_Key.pem
+    - /tmp:/tmp
+    depends_on:
+      - pg-docker
+      - eurekaservice
+      - spring-cloud-config-server
+  uiservice:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/uiservice:latest
+    restart: always
+    container_name: uiservice
+    ports:
+      - "6967:6967"
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+  csaruplaod-ui:
+    image: 013049013216.dkr.ecr.ap-southeast-2.amazonaws.com/csaruplaod-ui:preprod
+    restart: always
+    container_name: csaruplaod-ui
+    ports:
+      - "6968:6968"
+    networks:
+      - voanetwork
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        window: 520s
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 256M
+
+networks:
+  voanetwork:
